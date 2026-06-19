@@ -7,7 +7,7 @@ st.set_page_config(page_title="예측 이벤트", layout="wide")
 st_autorefresh(interval=5000, key="refresh")
 
 # ---------------------------
-# 상태 초기화
+# 상태
 # ---------------------------
 if "users" not in st.session_state:
     st.session_state.users = {}
@@ -36,93 +36,21 @@ with col2:
 
 
 # ---------------------------
-# Knox ID
+# Knox ID 입력 (변경 요청 반영)
 # ---------------------------
-knox_id = st.text_input("Knox ID 입력")
+knox_id = st.text_input("Knox ID 입력 후 엔터")
+
 
 is_admin = (knox_id == "jhwan1.choi")
 
 
 # =========================================================
-# 관리자 화면
-# =========================================================
-if st.session_state.admin_view and is_admin:
-
-    st.subheader("🔐 관리자 패널")
-
-    # ---------------------------
-    # 메인 복귀
-    # ---------------------------
-    if st.button("메인화면으로 복귀"):
-        st.session_state.admin_view = False
-
-    st.divider()
-
-    # ---------------------------
-    # 경기 결과 입력
-    # ---------------------------
-    rh = st.number_input("한국 득점", 0, 20, 0)
-    ra = st.number_input("상대 득점", 0, 20, 0)
-
-    if st.button("결과 확정"):
-        st.session_state.result = (rh, ra)
-        st.success("결과 저장 완료")
-
-    st.divider()
-
-    # ---------------------------
-    # 📊 데이터 테이블
-    # ---------------------------
-    st.subheader("📊 참여 데이터")
-
-    df = pd.DataFrame([
-        {
-            "Knox ID": k,
-            "승/무/패": v["outcome"],
-            "한국": v["home"],
-            "상대": v["away"]
-        }
-        for k, v in st.session_state.users.items()
-    ])
-
-    st.dataframe(df, use_container_width=True)
-
-    st.divider()
-
-    # ---------------------------
-    # 🚨 리셋 (2단계 확인)
-    # ---------------------------
-    st.subheader("⚠️ 데이터 초기화")
-
-    if st.button("초기화 시작"):
-        st.session_state.reset_confirm = True
-
-    if st.session_state.reset_confirm:
-
-        st.warning("정말 모든 데이터를 삭제하시겠습니까?")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button("❌ 아니오 (취소)"):
-                st.session_state.reset_confirm = False
-
-        with col2:
-            if st.button("✅ 예, 초기화 실행"):
-
-                st.session_state.users = {}
-                st.session_state.result = None
-                st.session_state.reset_confirm = False
-
-                st.success("🔥 모든 데이터가 초기화되었습니다.")
-
-
-# =========================================================
 # 사용자 화면
 # =========================================================
-else:
+if not (st.session_state.admin_view and is_admin):
 
     st.divider()
+
     st.subheader("📌 승/무/패 입력")
 
     outcome_map = {
@@ -131,16 +59,46 @@ else:
         "패": "LOSE"
     }
 
-    outcome_kr = st.radio("승/무/패 선택", ["승", "무", "패"])
+    outcome_kr = st.radio(
+        "승 / 무 / 패 선택",
+        ["승", "무", "패"]
+    )
 
     st.subheader("⚽ 스코어 입력")
 
     home = st.number_input("한국 득점", 0, 20)
     away = st.number_input("상대 득점", 0, 20)
 
+    # ---------------------------
+    # UX 강화 메시지
+    # ---------------------------
+    st.info("👉 입력이 완료되면 아래 '참여완료' 버튼을 눌러 제출해주세요!")
+
     if knox_id:
 
-        if st.button("참여 완료"):
+        st.warning("⚠️ 참여는 반드시 '참여완료' 버튼 클릭 후 최종 제출됩니다.")
+
+        # ---------------------------
+        # 버튼 스타일 강화 (CSS)
+        # ---------------------------
+        st.markdown("""
+            <style>
+            div.stButton > button {
+                background-color: #1f77b4;
+                color: white;
+                height: 60px;
+                font-size: 22px;
+                font-weight: bold;
+                border-radius: 10px;
+            }
+            div.stButton > button:hover {
+                background-color: #0d5fa0;
+                color: white;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        if st.button("🚀 참여 완료", use_container_width=True):
 
             st.session_state.users[knox_id] = {
                 "outcome": outcome_map[outcome_kr],
@@ -152,6 +110,26 @@ else:
 
     else:
         st.warning("Knox ID를 입력하세요")
+
+
+# =========================================================
+# 관리자 화면 (기존 유지)
+# =========================================================
+else:
+
+    st.subheader("🔐 관리자 패널")
+
+    if st.button("메인화면으로 복귀"):
+        st.session_state.admin_view = False
+
+    st.divider()
+
+    rh = st.number_input("한국 득점", 0, 20, 0)
+    ra = st.number_input("상대 득점", 0, 20, 0)
+
+    if st.button("결과 확정"):
+        st.session_state.result = (rh, ra)
+        st.success("결과 저장 완료")
 
 
 # =========================================================
