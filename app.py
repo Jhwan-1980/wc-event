@@ -7,7 +7,7 @@ st.set_page_config(page_title="예측 이벤트", layout="wide")
 st_autorefresh(interval=5000, key="refresh")
 
 # ---------------------------
-# 상태 초기화 (핵심 안정 구조)
+# 상태 초기화
 # ---------------------------
 if "users" not in st.session_state:
     st.session_state.users = {}
@@ -17,6 +17,9 @@ if "result" not in st.session_state:
 
 if "admin_view" not in st.session_state:
     st.session_state.admin_view = False
+
+if "reset_confirm" not in st.session_state:
+    st.session_state.reset_confirm = False
 
 
 # ---------------------------
@@ -33,14 +36,10 @@ with col2:
 
 
 # ---------------------------
-# Knox ID 입력
+# Knox ID
 # ---------------------------
 knox_id = st.text_input("Knox ID 입력")
 
-
-# ---------------------------
-# 관리자 권한
-# ---------------------------
 is_admin = (knox_id == "jhwan1.choi")
 
 
@@ -51,7 +50,9 @@ if st.session_state.admin_view and is_admin:
 
     st.subheader("🔐 관리자 패널")
 
-    # 메인 복귀 버튼 (이걸 눌러야만 복귀)
+    # ---------------------------
+    # 메인 복귀
+    # ---------------------------
     if st.button("메인화면으로 복귀"):
         st.session_state.admin_view = False
 
@@ -70,26 +71,50 @@ if st.session_state.admin_view and is_admin:
     st.divider()
 
     # ---------------------------
-    # 📊 엑셀 형태 데이터
+    # 📊 데이터 테이블
     # ---------------------------
-    st.subheader("📊 참여 데이터 (Excel View)")
+    st.subheader("📊 참여 데이터")
 
-    if st.session_state.users:
+    df = pd.DataFrame([
+        {
+            "Knox ID": k,
+            "승/무/패": v["outcome"],
+            "한국": v["home"],
+            "상대": v["away"]
+        }
+        for k, v in st.session_state.users.items()
+    ])
 
-        df = pd.DataFrame([
-            {
-                "Knox ID": k,
-                "승/무/패": v["outcome"],
-                "한국 득점": v["home"],
-                "상대 득점": v["away"]
-            }
-            for k, v in st.session_state.users.items()
-        ])
+    st.dataframe(df, use_container_width=True)
 
-        st.dataframe(df, use_container_width=True)
+    st.divider()
 
-    else:
-        st.info("아직 참여 데이터가 없습니다.")
+    # ---------------------------
+    # 🚨 리셋 (2단계 확인)
+    # ---------------------------
+    st.subheader("⚠️ 데이터 초기화")
+
+    if st.button("초기화 시작"):
+        st.session_state.reset_confirm = True
+
+    if st.session_state.reset_confirm:
+
+        st.warning("정말 모든 데이터를 삭제하시겠습니까?")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("❌ 아니오 (취소)"):
+                st.session_state.reset_confirm = False
+
+        with col2:
+            if st.button("✅ 예, 초기화 실행"):
+
+                st.session_state.users = {}
+                st.session_state.result = None
+                st.session_state.reset_confirm = False
+
+                st.success("🔥 모든 데이터가 초기화되었습니다.")
 
 
 # =========================================================
@@ -100,27 +125,19 @@ else:
     st.divider()
     st.subheader("📌 승/무/패 입력")
 
-    # 한글 UI
     outcome_map = {
         "승": "WIN",
         "무": "DRAW",
         "패": "LOSE"
     }
 
-    outcome_kr = st.radio(
-        "승 / 무 / 패 선택",
-        ["승", "무", "패"]
-    )
+    outcome_kr = st.radio("승/무/패 선택", ["승", "무", "패"])
 
     st.subheader("⚽ 스코어 입력")
 
     home = st.number_input("한국 득점", 0, 20)
     away = st.number_input("상대 득점", 0, 20)
 
-
-    # ---------------------------
-    # 제출
-    # ---------------------------
     if knox_id:
 
         if st.button("참여 완료"):
