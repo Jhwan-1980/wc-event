@@ -1,7 +1,33 @@
 import streamlit as st
 import pandas as pd
+import json
+import os
 
 st.set_page_config(page_title="예측 이벤트", layout="wide")
+
+# =========================================================
+# 데이터 파일 경로
+# =========================================================
+DATA_FILE = "event_data.json"
+
+
+# =========================================================
+# 파일 로드 함수
+# =========================================================
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+# =========================================================
+# 파일 저장 함수
+# =========================================================
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
 
 # =========================================================
 # 상태 초기화
@@ -10,7 +36,7 @@ if "step" not in st.session_state:
     st.session_state.step = 1
 
 if "users" not in st.session_state:
-    st.session_state.users = {}
+    st.session_state.users = load_data()   # ⭐ 파일에서 로드
 
 if "result" not in st.session_state:
     st.session_state.result = None
@@ -54,7 +80,7 @@ with col2:
 
 
 # =========================================================
-# 관리자 패널
+# 🔐 관리자 패널
 # =========================================================
 if st.session_state.admin_mode and is_admin:
 
@@ -105,21 +131,14 @@ if st.session_state.admin_mode and is_admin:
 
         st.dataframe(df, use_container_width=True)
 
-        # 📥 다운로드
-        csv = df.to_csv(index=False).encode("utf-8-sig")
-
-        st.download_button(
-            label="📥 전체 결과 Excel 다운로드",
-            data=csv,
-            file_name="event_result.csv",
-            mime="text/csv"
-        )
-
     else:
         st.info("데이터 없음")
 
     st.divider()
 
+    # =====================================================
+    # 🚨 초기화 (파일 + session 둘 다 삭제)
+    # =====================================================
     st.subheader("⚠️ 게임 초기화")
 
     if st.button("초기화 시작"):
@@ -137,16 +156,19 @@ if st.session_state.admin_mode and is_admin:
 
         with col2:
             if st.button("확인"):
+
                 st.session_state.users = {}
+                save_data({})   # ⭐ 파일 초기화
+
                 st.session_state.result = None
                 st.session_state.reset_step = False
                 st.session_state.step = 1
 
-                st.success("초기화 완료 → 시작화면 복귀")
+                st.success("🔥 초기화 완료 → 시작화면 복귀")
 
 
 # =========================================================
-# STEP FLOW
+# 👤 STEP FLOW (버전5 유지)
 # =========================================================
 elif st.session_state.step == 1:
 
@@ -169,7 +191,6 @@ elif st.session_state.step == 2:
 
     if st.button("다음"):
 
-        # ⭐ 한글 자동 판정 (핵심 수정)
         if home > away:
             outcome = "승"
         elif home == away:
@@ -198,6 +219,9 @@ elif st.session_state.step == 3:
             "home": st.session_state.home,
             "away": st.session_state.away
         }
+
+        # ⭐ 파일 저장 추가
+        save_data(st.session_state.users)
 
         st.success("🎉 참여 완료!")
 
