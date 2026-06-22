@@ -1,54 +1,46 @@
 import streamlit as st
+import pandas as pd
 
 st.set_page_config(page_title="예측 이벤트", layout="wide")
 
 # =========================================================
 # 상태 초기화
 # =========================================================
-if "step" not in st.session_state:
-    st.session_state.step = 1
-
-if "knox_id" not in st.session_state:
-    st.session_state.knox_id = ""
-
-if "choice" not in st.session_state:
-    st.session_state.choice = ""
-
-if "home" not in st.session_state:
-    st.session_state.home = 0
-
-if "away" not in st.session_state:
-    st.session_state.away = 0
-
 if "users" not in st.session_state:
     st.session_state.users = {}
-
-if "admin_mode" not in st.session_state:
-    st.session_state.admin_mode = False
 
 if "result" not in st.session_state:
     st.session_state.result = None
 
+if "admin_mode" not in st.session_state:
+    st.session_state.admin_mode = False
+
+if "reset_step" not in st.session_state:
+    st.session_state.reset_step = False
+
+if "knox_id" not in st.session_state:
+    st.session_state.knox_id = ""
+
 
 # =========================================================
-# 헤더 (항상 고정)
+# 헤더
 # =========================================================
 st.title("🏆 대한민국 : 남아공 경기 예측 이벤트")
 
 
 # =========================================================
-# Knox ID 입력 (항상 표시)
+# Knox ID
 # =========================================================
 knox_input = st.text_input("Knox ID 입력")
 
 if knox_input:
     st.session_state.knox_id = knox_input
 
-is_admin = (st.session_state.knox_id == "jhwan1.choi")
+is_admin = st.session_state.knox_id == "jhwan1.choi"
 
 
 # =========================================================
-# 관리자 버튼 (항상 우측 상단 역할)
+# 관리자 버튼
 # =========================================================
 col1, col2 = st.columns([9, 1])
 
@@ -59,21 +51,25 @@ with col2:
 
 
 # =========================================================
-# =========================================================
-# 🔐 관리자 화면 (STEP 99)
-# =========================================================
+# 관리자 패널
 # =========================================================
 if st.session_state.admin_mode and is_admin:
 
     st.subheader("🔐 관리자 패널")
 
+    # -------------------------
+    # 메인 복귀
+    # -------------------------
     if st.button("메인으로 복귀"):
         st.session_state.admin_mode = False
 
     st.divider()
 
-    rh = st.number_input("한국 득점", 0, 20, 0)
-    ra = st.number_input("남아공 득점", 0, 20, 0)
+    # -------------------------
+    # 경기 결과 입력
+    # -------------------------
+    rh = st.number_input("대한민국 스코어", 0, 20, 0)
+    ra = st.number_input("남아공 스코어", 0, 20, 0)
 
     if st.button("결과 확정"):
         st.session_state.result = (rh, ra)
@@ -81,119 +77,124 @@ if st.session_state.admin_mode and is_admin:
 
     st.divider()
 
-    st.subheader("📊 참여 데이터")
+    # =====================================================
+    # 📊 전체 참여자 결과 (엑셀 스타일)
+    # =====================================================
+    st.subheader("📊 전체 참여자 결과")
 
-    for k, v in st.session_state.users.items():
-        st.write(f"{k} | {v}")
+    if st.session_state.result:
 
+        rh, ra = st.session_state.result
 
-# =========================================================
-# =========================================================
-# 👤 STEP FLOW (핵심)
-# =========================================================
-# =========================================================
+        def calc_score(v):
+            base = 0
 
-elif st.session_state.step == 1:
+            # 승부 적중
+            actual_outcome = "WIN" if rh > ra else "DRAW" if rh == ra else "LOSE"
 
-    st.subheader("1️⃣ Knox ID 입력")
+            if v["outcome"] == actual_outcome:
+                base += 1
 
-    if st.button("다음"):
-        if st.session_state.knox_id:
-            st.session_state.step = 2
-            st.rerun()
-        else:
-            st.warning("Knox ID 입력 필요")
+            # 스코어 근접도
+            diff = abs(v["home"] - rh) + abs(v["away"] - ra)
 
+            score = base + (10 - diff) * 0.1  # 세분화 점수
 
-elif st.session_state.step == 2:
+            return round(score, 2), diff
 
-    st.subheader("2️⃣ 승 / 무 / 패 선택")
+        rows = []
 
-    choice = st.radio("선택", ["승", "무", "패"])
+        for k, v in st.session_state.users.items():
+            score, diff = calc_score(v)
 
-    if st.button("다음"):
-        st.session_state.choice = choice
-        st.session_state.step = 3
-        st.rerun()
+            rows.append({
+                "참여자 ID": k,
+                "승무패": v["outcome"],
+                "대한민국 스코어": v["home"],
+                "남아공 스코어": v["away"],
+                "획득 점수": score
+            })
 
-    if st.button("이전"):
-        st.session_state.step = 1
-        st.rerun()
+        df = pd.DataFrame(rows)
 
+        # 정렬
+        df = df.sort_values(by="획득 점수", ascending=False)
 
-elif st.session_state.step == 3:
+        # 공동순위 처리
+        df["순위"] = df["획득 점수"].rank(method="min", ascending=False).astype(int)
 
-    st.subheader("3️⃣ 스코어 입력")
+        # 보기 좋게 정렬
+        df = df.sort_values(by=["순위", "획득 점수"], ascending=[True, False])
 
-    home = st.number_input("한국 득점", 0, 20)
-    away = st.number_input("남아공 득점", 0, 20)
-
-    if st.button("다음"):
-        st.session_state.home = home
-        st.session_state.away = away
-        st.session_state.step = 4
-        st.rerun()
-
-    if st.button("이전"):
-        st.session_state.step = 2
-        st.rerun()
+        st.dataframe(df, use_container_width=True)
 
 
-elif st.session_state.step == 4:
-
-    st.subheader("4️⃣ 최종 제출")
-
-    st.info("모든 입력 완료 후 참여를 제출합니다.")
-
-    if st.button("참여 완료"):
-
-        st.session_state.users[st.session_state.knox_id] = {
-            "outcome": st.session_state.choice,
-            "home": st.session_state.home,
-            "away": st.session_state.away
-        }
-
-        st.success("🎉 참여해주셔서 감사합니다!")
-
-    if st.button("처음으로"):
-        st.session_state.step = 1
-        st.rerun()
-
-
-# =========================================================
-# =========================================================
-# 🏆 랭킹 (옵션 표시)
-# =========================================================
-# =========================================================
-def get_outcome(h, a):
-    if h > a:
-        return "WIN"
-    elif h == a:
-        return "DRAW"
     else:
-        return "LOSE"
+        st.info("아직 결과가 없습니다.")
 
 
-if st.session_state.result:
+    st.divider()
 
-    st.subheader("🏆 TOP 10")
+    # =====================================================
+    # 🚨 초기화 (2단계 확인)
+    # =====================================================
+    st.subheader("⚠️ 게임 초기화")
 
-    rh, ra = st.session_state.result
-    actual = get_outcome(rh, ra)
+    if st.button("초기화 시작"):
+        st.session_state.reset_step = True
 
-    rows = []
+    if st.session_state.reset_step:
 
-    for k, v in st.session_state.users.items():
+        st.warning("정말 모든 데이터를 초기화하시겠습니까?")
 
-        diff = abs(v["home"] - rh) + abs(v["away"] - ra)
+        col1, col2 = st.columns(2)
 
-        rows.append({
-            "Knox ID": k,
-            "승부": v["outcome"],
-            "오차": diff,
-            "적중": v["outcome"] == actual
-        })
+        with col1:
+            if st.button("취소"):
+                st.session_state.reset_step = False
 
-    rows = sorted(rows, key=lambda x: (not x["적중"], x["오차"]))
+        with col2:
+            if st.button("확인 후 초기화"):
 
-    st.dataframe(rows[:10], use_container_width=True)
+                st.session_state.users = {}
+                st.session_state.result = None
+                st.session_state.reset_step = False
+
+                st.success("🔥 모든 데이터 초기화 완료")
+
+
+# =========================================================
+# 사용자 입력 (간단 유지)
+# =========================================================
+else:
+
+    st.divider()
+    st.subheader("📌 승/무/패 입력")
+
+    outcome_map = {
+        "승": "WIN",
+        "무": "DRAW",
+        "패": "LOSE"
+    }
+
+    outcome_kr = st.radio("승 / 무 / 패 선택", ["승", "무", "패"])
+
+    st.subheader("⚽ 스코어 입력")
+
+    home = st.number_input("대한민국 스코어", 0, 20)
+    away = st.number_input("남아공 스코어", 0, 20)
+
+    if knox_input:
+
+        if st.button("참여 완료"):
+
+            st.session_state.users[st.session_state.knox_id] = {
+                "outcome": outcome_map[outcome_kr],
+                "home": home,
+                "away": away
+            }
+
+            st.success("🎉 참여 완료!")
+
+    else:
+        st.warning("Knox ID 입력 필요")
