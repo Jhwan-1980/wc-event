@@ -6,7 +6,31 @@ import os
 st.set_page_config(page_title="예측 이벤트", layout="wide")
 
 # =========================================================
-# 파일 저장
+# 🌍 월드컵 스타일 CSS 애니메이션
+# =========================================================
+st.markdown("""
+<style>
+@keyframes glow {
+  0% {opacity: 0.6;}
+  50% {opacity: 1;}
+  100% {opacity: 0.6;}
+}
+
+.flag {
+    font-size: 40px;
+    animation: glow 1.5s infinite;
+}
+
+.title {
+    font-size: 28px;
+    font-weight: bold;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# =========================================================
+# 데이터 저장
 # =========================================================
 DATA_FILE = "event_data.json"
 
@@ -44,9 +68,11 @@ if "knox_id" not in st.session_state:
 
 
 # =========================================================
-# 헤더
+# 🌍 헤더 (월드컵 분위기 강화)
 # =========================================================
-st.title("🏆 대한민국 : 남아공 경기 예측 이벤트")
+st.markdown('<div class="title">🏆 대한민국 : 남아공 경기 예측 이벤트</div>', unsafe_allow_html=True)
+
+st.markdown("🇰🇷 🇿🇦 ⚽ WORLD CUP PREDICTION GAME ⚽ 🇰🇷 🇿🇦")
 
 
 # =========================================================
@@ -94,12 +120,12 @@ if st.session_state.admin_mode and is_admin:
 
     st.subheader(f"📊 전체 참여자 결과 (총 {len(st.session_state.users)}명)")
 
-    if st.session_state.users:
+    def calc_score(v, rh, ra):
+        base = 1 if v["outcome"] == ("승" if rh > ra else "무" if rh == ra else "패") else 0
+        diff = abs(v["home"] - rh) + abs(v["away"] - ra)
+        return round(base + (10 - diff) * 0.1, 2)
 
-        def calc_score(v, rh, ra):
-            base = 1 if v["outcome"] == ("승" if rh > ra else "무" if rh == ra else "패") else 0
-            diff = abs(v["home"] - rh) + abs(v["away"] - ra)
-            return round(base + (10 - diff) * 0.1, 2)
+    if st.session_state.users:
 
         rows = []
 
@@ -107,22 +133,19 @@ if st.session_state.admin_mode and is_admin:
             rows.append({
                 "참여자 ID": k,
                 "승무패": v["outcome"],
-                "대한민국 스코어": v["home"],
-                "남아공 스코어": v["away"],
+                "대한민국": v["home"],
+                "남아공": v["away"],
                 "획득 점수": calc_score(v, rh, ra)
             })
 
         df = pd.DataFrame(rows)
-
         df = df.sort_values(by="획득 점수", ascending=False)
-
         df["순위"] = df["획득 점수"].rank(method="dense", ascending=False)
 
         st.dataframe(df, use_container_width=True)
 
     st.divider()
 
-    # 초기화 유지
     st.subheader("⚠️ 게임 초기화")
 
     if st.button("초기화 시작"):
@@ -145,16 +168,18 @@ if st.session_state.admin_mode and is_admin:
                 st.session_state.reset_step = False
                 st.session_state.step = 1
 
-                st.success("초기화 완료")
+                st.success("초기화 완료 → 시작화면 복귀")
 
 
 # =========================================================
-# 👤 STEP FLOW
+# 👤 STEP 1 - ID
 # =========================================================
-
 elif st.session_state.step == 1:
 
-    st.subheader("1️⃣ Knox ID 입력")
+    st.markdown("### 🌍 STEP 1 - 참가자 등록")
+
+    st.markdown('<div class="flag">🇰🇷 대한민국 참가자 등록</div>', unsafe_allow_html=True)
+    st.markdown('<div class="flag">🇿🇦 South Africa Challenge</div>', unsafe_allow_html=True)
 
     if st.button("다음"):
         if st.session_state.knox_id:
@@ -164,9 +189,14 @@ elif st.session_state.step == 1:
             st.warning("Knox ID 입력 필요")
 
 
+# =========================================================
+# 👤 STEP 2 - SCORE
+# =========================================================
 elif st.session_state.step == 2:
 
-    st.subheader("2️⃣ 스코어 입력")
+    st.markdown("### ⚽ STEP 2 - 스코어 입력")
+
+    st.markdown('<div class="flag">🇰🇷 vs 🇿🇦 MATCH PREDICTION</div>', unsafe_allow_html=True)
 
     home = st.number_input("대한민국", 0, 20)
     away = st.number_input("남아공", 0, 20)
@@ -184,11 +214,13 @@ elif st.session_state.step == 2:
 
 
 # =========================================================
-# ⭐ STEP 3 (수정 핵심: 제출 후 현황 표시)
+# 👤 STEP 3 - FINAL
 # =========================================================
 elif st.session_state.step == 3:
 
-    st.subheader("3️⃣ 최종 제출")
+    st.markdown("### 🏆 STEP 3 - 최종 제출")
+
+    st.markdown('<div class="flag">🏆 FINAL CONFIRMATION</div>', unsafe_allow_html=True)
 
     st.info(f"자동 판정 결과: {st.session_state.outcome}")
 
@@ -204,22 +236,7 @@ elif st.session_state.step == 3:
 
         st.success("🎉 참여 완료!")
 
-        # =====================================================
-        # ⭐ 추가 기능: 현재 참여 현황 표시
-        # =====================================================
-        st.divider()
-        st.subheader("📊 현재 참여 현황")
-
-        df_live = pd.DataFrame([
-            {
-                "ID": k,
-                "스코어": f"{v['home']} : {v['away']}",
-                "승/무/패": v["outcome"]
-            }
-            for k, v in st.session_state.users.items()
-        ])
-
-        st.dataframe(df_live, use_container_width=True)
+        st.session_state.step = 1
 
     if st.button("처음으로"):
         st.session_state.step = 1
