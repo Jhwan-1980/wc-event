@@ -6,24 +6,16 @@ import os
 st.set_page_config(page_title="예측 이벤트", layout="wide")
 
 # =========================================================
-# 데이터 파일 경로
+# 파일 저장
 # =========================================================
 DATA_FILE = "event_data.json"
 
-
-# =========================================================
-# 파일 로드 함수
-# =========================================================
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
-
-# =========================================================
-# 파일 저장 함수
-# =========================================================
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
@@ -36,7 +28,7 @@ if "step" not in st.session_state:
     st.session_state.step = 1
 
 if "users" not in st.session_state:
-    st.session_state.users = load_data()   # ⭐ 파일에서 로드
+    st.session_state.users = load_data()
 
 if "result" not in st.session_state:
     st.session_state.result = None
@@ -80,7 +72,7 @@ with col2:
 
 
 # =========================================================
-# 🔐 관리자 패널
+# 🔐 관리자 패널 (유지)
 # =========================================================
 if st.session_state.admin_mode and is_admin:
 
@@ -102,15 +94,12 @@ if st.session_state.admin_mode and is_admin:
 
     st.subheader(f"📊 전체 참여자 결과 (총 {len(st.session_state.users)}명)")
 
-    def calc_score(v, rh, ra):
-
-        base = 1 if v["outcome"] == ("WIN" if rh > ra else "DRAW" if rh == ra else "LOSE") else 0
-
-        diff = abs(v["home"] - rh) + abs(v["away"] - ra)
-
-        return round(base + (10 - diff) * 0.1, 2)
-
     if st.session_state.users:
+
+        def calc_score(v, rh, ra):
+            base = 1 if v["outcome"] == ("승" if rh > ra else "무" if rh == ra else "패") else 0
+            diff = abs(v["home"] - rh) + abs(v["away"] - ra)
+            return round(base + (10 - diff) * 0.1, 2)
 
         rows = []
 
@@ -131,14 +120,9 @@ if st.session_state.admin_mode and is_admin:
 
         st.dataframe(df, use_container_width=True)
 
-    else:
-        st.info("데이터 없음")
-
     st.divider()
 
-    # =====================================================
-    # 🚨 초기화 (파일 + session 둘 다 삭제)
-    # =====================================================
+    # 초기화 유지
     st.subheader("⚠️ 게임 초기화")
 
     if st.button("초기화 시작"):
@@ -156,20 +140,18 @@ if st.session_state.admin_mode and is_admin:
 
         with col2:
             if st.button("확인"):
-
                 st.session_state.users = {}
-                save_data({})   # ⭐ 파일 초기화
-
-                st.session_state.result = None
+                save_data({})
                 st.session_state.reset_step = False
                 st.session_state.step = 1
 
-                st.success("🔥 초기화 완료 → 시작화면 복귀")
+                st.success("초기화 완료")
 
 
 # =========================================================
-# 👤 STEP FLOW (버전5 유지)
+# 👤 STEP FLOW
 # =========================================================
+
 elif st.session_state.step == 1:
 
     st.subheader("1️⃣ Knox ID 입력")
@@ -191,12 +173,7 @@ elif st.session_state.step == 2:
 
     if st.button("다음"):
 
-        if home > away:
-            outcome = "승"
-        elif home == away:
-            outcome = "무"
-        else:
-            outcome = "패"
+        outcome = "승" if home > away else "무" if home == away else "패"
 
         st.session_state.home = home
         st.session_state.away = away
@@ -206,6 +183,9 @@ elif st.session_state.step == 2:
         st.rerun()
 
 
+# =========================================================
+# ⭐ STEP 3 (수정 핵심: 제출 후 현황 표시)
+# =========================================================
 elif st.session_state.step == 3:
 
     st.subheader("3️⃣ 최종 제출")
@@ -220,12 +200,26 @@ elif st.session_state.step == 3:
             "away": st.session_state.away
         }
 
-        # ⭐ 파일 저장 추가
         save_data(st.session_state.users)
 
         st.success("🎉 참여 완료!")
 
-        st.session_state.step = 1
+        # =====================================================
+        # ⭐ 추가 기능: 현재 참여 현황 표시
+        # =====================================================
+        st.divider()
+        st.subheader("📊 현재 참여 현황")
+
+        df_live = pd.DataFrame([
+            {
+                "ID": k,
+                "스코어": f"{v['home']} : {v['away']}",
+                "승/무/패": v["outcome"]
+            }
+            for k, v in st.session_state.users.items()
+        ])
+
+        st.dataframe(df_live, use_container_width=True)
 
     if st.button("처음으로"):
         st.session_state.step = 1
