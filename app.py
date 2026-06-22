@@ -54,9 +54,7 @@ with col2:
 
 
 # =========================================================
-# =========================================================
-# 🔐 관리자 패널
-# =========================================================
+# 관리자 패널
 # =========================================================
 if st.session_state.admin_mode and is_admin:
 
@@ -67,9 +65,6 @@ if st.session_state.admin_mode and is_admin:
 
     st.divider()
 
-    # =====================================================
-    # 경기 결과 입력
-    # =====================================================
     rh = st.number_input("대한민국 스코어", 0, 20, 0)
     ra = st.number_input("남아공 스코어", 0, 20, 0)
 
@@ -79,9 +74,6 @@ if st.session_state.admin_mode and is_admin:
 
     st.divider()
 
-    # =====================================================
-    # 📊 전체 참여자 결과 + 인원수
-    # =====================================================
     st.subheader(f"📊 전체 참여자 결과 (총 {len(st.session_state.users)}명)")
 
     def calc_score(v, rh, ra):
@@ -90,36 +82,30 @@ if st.session_state.admin_mode and is_admin:
 
         diff = abs(v["home"] - rh) + abs(v["away"] - ra)
 
-        score = base + (10 - diff) * 0.1
-
-        return round(score, 2), diff
-
-    rows = []
+        return round(base + (10 - diff) * 0.1, 2)
 
     if st.session_state.users:
 
-        for k, v in st.session_state.users.items():
-            score, diff = calc_score(v, rh, ra)
+        rows = []
 
+        for k, v in st.session_state.users.items():
             rows.append({
                 "참여자 ID": k,
                 "승무패": v["outcome"],
                 "대한민국 스코어": v["home"],
                 "남아공 스코어": v["away"],
-                "획득 점수": score
+                "획득 점수": calc_score(v, rh, ra)
             })
 
         df = pd.DataFrame(rows)
 
         df = df.sort_values(by="획득 점수", ascending=False)
 
-        df["순위"] = df["획득 점수"].rank(method="dense", ascending=False).astype(int)
+        df["순위"] = df["획득 점수"].rank(method="dense", ascending=False)
 
         st.dataframe(df, use_container_width=True)
 
-        # =====================================================
-        # 📥 Excel 다운로드 기능
-        # =====================================================
+        # 📥 다운로드
         csv = df.to_csv(index=False).encode("utf-8-sig")
 
         st.download_button(
@@ -132,12 +118,8 @@ if st.session_state.admin_mode and is_admin:
     else:
         st.info("데이터 없음")
 
-
     st.divider()
 
-    # =====================================================
-    # 🚨 초기화
-    # =====================================================
     st.subheader("⚠️ 게임 초기화")
 
     if st.button("초기화 시작"):
@@ -155,7 +137,6 @@ if st.session_state.admin_mode and is_admin:
 
         with col2:
             if st.button("확인"):
-
                 st.session_state.users = {}
                 st.session_state.result = None
                 st.session_state.reset_step = False
@@ -165,11 +146,8 @@ if st.session_state.admin_mode and is_admin:
 
 
 # =========================================================
+# STEP FLOW
 # =========================================================
-# 👤 STEP FLOW (승/무/패 삭제됨)
-# =========================================================
-# =========================================================
-
 elif st.session_state.step == 1:
 
     st.subheader("1️⃣ Knox ID 입력")
@@ -182,9 +160,6 @@ elif st.session_state.step == 1:
             st.warning("Knox ID 입력 필요")
 
 
-# =========================================================
-# STEP 2 (스코어 + 자동 승무패)
-# =========================================================
 elif st.session_state.step == 2:
 
     st.subheader("2️⃣ 스코어 입력")
@@ -194,13 +169,13 @@ elif st.session_state.step == 2:
 
     if st.button("다음"):
 
-        # 자동 승무패 계산
+        # ⭐ 한글 자동 판정 (핵심 수정)
         if home > away:
-            outcome = "WIN"
+            outcome = "승"
         elif home == away:
-            outcome = "DRAW"
+            outcome = "무"
         else:
-            outcome = "LOSE"
+            outcome = "패"
 
         st.session_state.home = home
         st.session_state.away = away
@@ -210,9 +185,6 @@ elif st.session_state.step == 2:
         st.rerun()
 
 
-# =========================================================
-# STEP 3 (제출)
-# =========================================================
 elif st.session_state.step == 3:
 
     st.subheader("3️⃣ 최종 제출")
