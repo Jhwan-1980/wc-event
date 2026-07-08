@@ -111,6 +111,17 @@
   /* ── 결과 / 순위 ─────────────────────────────── */
   .big-score{font-size:56px; font-weight:900; text-align:center;
     background:linear-gradient(92deg,#7DB2FF,var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  #thanksOverlay{
+    position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center;
+    background:rgba(11,16,38,.92); backdrop-filter:blur(6px);
+  }
+  .thanks-big{
+    font-size:clamp(44px,11vw,96px); font-weight:900; text-align:center; line-height:1.25; padding:0 16px;
+    background:linear-gradient(92deg,#FFD166,#7DB2FF,var(--cyan));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:thanksPop .6s cubic-bezier(.2,1.4,.4,1);
+  }
+  @keyframes thanksPop{0%{transform:scale(.3);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
   .thanks{text-align:center; font-size:22px; font-weight:800; margin-top:8px}
   .sub-scores{display:flex; justify-content:center; gap:18px; margin-top:14px; color:var(--dim); font-size:14px}
   .sub-scores b{color:var(--ink)}
@@ -181,8 +192,13 @@
     <p class="desc">나의 총점</p>
     <div class="big-score" id="totalScore">0점</div>
     <div class="sub-scores" id="subScores"></div>
-    <div class="thanks">🎉 감사합니다! 🎉</div>
+    <button class="btn block" id="btnFinish">게임완료</button>
   </section>
+
+  <!-- ── 감사합니다 오버레이 ───────────────────── -->
+  <div id="thanksOverlay" class="hidden">
+    <div class="thanks-big">🎉 감사합니다! 🎉</div>
+  </div>
 
   <!-- ── 순위 화면 ─────────────────────────────── -->
   <section id="screen-rank" class="panel hidden">
@@ -234,7 +250,7 @@ let demoMode = false;
 const mock = { players: new Map() }; // knox_id → {name, total, s1,s2,s3, finished, t}
 function mockBoard(){
   return [...mock.players.entries()].filter(([,v])=>v.finished)
-    .sort((a,b)=> b[1].total-a[1].total || a[1].t-b[1].t)
+    .sort((a,b)=> b[1].total-a[1].total || a[1].playMs-b[1].playMs || a[1].t-b[1].t)
     .map(([id,v],i)=>({rank:i+1,id,name:v.name,total:v.total}));
 }
 function mockApi(path, body){
@@ -246,7 +262,8 @@ function mockApi(path, body){
   }
   if(path==='/api/score'){
     const p=mock.players.get(id); if(!p) return {ok:false};
-    Object.assign(p,{s1:body.s1,s2:body.s2,s3:body.s3,total:body.s1+body.s2+body.s3,finished:1,t:Date.now()});
+    const total = Math.round((body.s1+body.s2+body.s3)*100)/100;
+    Object.assign(p,{s1:body.s1,s2:body.s2,s3:body.s3,total,playMs:body.playMs||0,finished:1,t:Date.now()});
     const b=mockBoard(); return {ok:true,total:p.total,rank:b.find(x=>x.id===id)?.rank||null,count:b.length};
   }
   if(path==='/api/leaderboard') return {list:mockBoard()};
@@ -457,24 +474,39 @@ function loadStage(){
 $('#btnErase').onclick = ()=>{ strokes=[]; curStroke=null; $('#btnSubmit').disabled=true; drawCanvas(); };
 $('#btnSubmit').onclick = async ()=>{
   const st = STAGES[stageIdx];
-  // 손으로 그린 모든 점의 목표 라인 대비 평균 편차로 채점 (변별력 ↑)
   const pts = strokes.flat();
-  const devs = pts.map(p => Math.abs((st.dir==='h' ? p.y : p.x) - st.targetPct));
-  const avgDev = devs.reduce((a,b)=>a+b,0) / devs.length;   // 0~1
-  scores[stageIdx] = Math.max(0, Math.round(100 - avgDev*100*5)); // 평균 편차 1%p당 5점 감점
+  const coords = pts.map(p => st.dir==='h' ? p.y : p.x);
+  // ① 위치 정확도: 목표 라인 대비 평균 편차 (1%p당 5점 감점)
+  const devs = coords.map(v => Math.abs(v - st.targetPct));
+  const avgDev = devs.reduce((a,b)=>a+b,0) / devs.length;
+  // ② 직진도: 선 자체의 출렁임(표준편차, 1%p당 2점 감점) — 동점 방지용 추가 변별 축
+  const mean = coords.reduce((a,b)=>a+b,0) / coords.length;
+  const std = Math.sqrt(coords.reduce((a,v)=>a+(v-mean)**2,0) / coords.length);
+  // 소수점 2자리 정밀 채점 (1,100명 동점 방지)
+  const raw = 100 - avgDev*100*5 - std*100*2;
+  scores[stageIdx] = Math.max(0, Math.round(raw*100)/100);
   if(stageIdx < 2){ stageIdx++; loadStage(); }
   else await finishGame();
 };
 async function finishGame(){
-  const total = scores[0]+scores[1]+scores[2];
-  $('#totalScore').textContent = total+'점';
-  $('#subScores').innerHTML = scores.map((s,i)=>`${i+1}단계 <b>${s}점</b>`).join(' · ');
+  const total = Math.round((scores[0]+scores[1]+scores[2])*100)/100;
+  $('#totalScore').textContent = fmt(total)+'점';
+  $('#subScores').innerHTML = scores.map((s,i)=>`${i+1}단계 <b>${fmt(s)}점</b>`).join(' · ');
   show('result');
-  let myRank=null;
-  const d = await api('/api/score',{id:me.id, s1:scores[0], s2:scores[1], s3:scores[2]});
-  if(d && d.ok) myRank = d.rank;
-  setTimeout(()=> showRank(myRank), 1000+ (0)); // 1초 후 순위 화면 전환
+  // 점수는 결과 화면 진입 시 즉시 저장 (버튼을 안 눌러도 기록 보존)
+  const d = await api('/api/score',{id:me.id, s1:scores[0], s2:scores[1], s3:scores[2], playMs: Date.now()-playStart});
+  myFinalRank = (d && d.ok) ? d.rank : null;
 }
+let myFinalRank = null;
+let playStart = 0;
+const fmt = v => (Math.round(v*100)/100).toFixed(2);
+$('#btnFinish').onclick = ()=>{
+  $('#thanksOverlay').classList.remove('hidden');   // 감사합니다! 크게 표시
+  setTimeout(()=>{                                   // 1초 후 순위 화면으로 전환
+    $('#thanksOverlay').classList.add('hidden');
+    showRank(myFinalRank);
+  }, 1000);
+};
 
 /* ═══════════════ 순위 ═══════════════ */
 async function showRank(myRank){
@@ -487,7 +519,7 @@ async function renderRank(myRank){
     const list = d.list||[];
     $('#rankBody').innerHTML = list.map(row=>{
       const medal = row.rank===1?'🥇':row.rank===2?'🥈':row.rank===3?'🥉':row.rank;
-      return `<tr class="${row.id===me.id?'me':''}"><td class="rank medal">${medal}</td><td>${esc(row.id)}</td><td>${esc(row.name)}</td><td>${row.total}점</td></tr>`;
+      return `<tr class="${row.id===me.id?'me':''}"><td class="rank medal">${medal}</td><td>${esc(row.id)}</td><td>${esc(row.name)}</td><td>${fmt(row.total)}점</td></tr>`;
     }).join('') || '<tr><td colspan="4">아직 완료한 참가자가 없습니다.</td></tr>';
     const meRow = list.find(x=>x.id===me.id);
     $('#myRankLine').innerHTML = meRow
@@ -514,6 +546,7 @@ $('#btnStart').onclick = async ()=>{
   if(!d || !d.ok){ msg.textContent = (d && d.message) || '등록에 실패했습니다.'; return; }
   me = { id:id.toLowerCase(), name };
   scores=[0,0,0]; stageIdx=0;
+  playStart = Date.now();   // 동점자 처리용 플레이 시간 측정 시작
   show('game'); loadStage();
 };
 
@@ -532,7 +565,7 @@ async function loadAdmin(){
     const d = await api('/api/admin/participants',{id:ADMIN_ID,name:ADMIN_NAME});
     if(!d || !d.ok) return;
     $('#adminSummary').innerHTML = `총 참여 <b>${d.totalCount}명</b> · 완료 <b>${d.done.length}명</b> · 진행 중 <b>${d.playing.length}명</b>`;
-    const doneRows = d.done.map(x=>`<tr><td class="rank">${x.rank}</td><td>${esc(x.id)}</td><td>${esc(x.name)}</td><td>${x.total}점</td></tr>`).join('');
+    const doneRows = d.done.map(x=>`<tr><td class="rank">${x.rank}</td><td>${esc(x.id)}</td><td>${esc(x.name)}</td><td>${fmt(x.total)}점</td></tr>`).join('');
     const playRows = d.playing.map(x=>`<tr style="opacity:.55"><td class="rank">—</td><td>${esc(x.id)}</td><td>${esc(x.name)}</td><td>진행 중</td></tr>`).join('');
     $('#adminBody').innerHTML = (doneRows+playRows) || '<tr><td colspan="4">참가자가 없습니다.</td></tr>';
   }catch(e){}
